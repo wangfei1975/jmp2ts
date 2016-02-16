@@ -11,6 +11,25 @@ public final class Frame {
     int  mData;
     int  mSize;
     int  mFlag;
+
+    public int getFlag() {
+        return  mFlag;
+    }
+    public byte [] getBuffer() {
+        return mBuffer;
+    }
+    public long getDts() {
+        return mDts;
+    }
+    public long getPts() {
+        return mPts;
+    }
+    public int getOffset() {
+        return mData;
+    }
+    public int getSize() {
+        return mSize;
+    }
     Frame(byte [] buffer, int start, int size, long dts, long pts, int flag) {
         mBuffer = buffer;
         mData = start;

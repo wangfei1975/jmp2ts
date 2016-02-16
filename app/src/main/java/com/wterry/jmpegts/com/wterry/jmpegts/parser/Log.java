@@ -26,6 +26,7 @@ public final class Log {
                 break;
             case DEBUG:
                 android.util.Log.d(tag, msg);
+                break;
             default:
                 android.util.Log.v(tag , msg);
                 break;

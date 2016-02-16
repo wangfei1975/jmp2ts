@@ -6,9 +6,15 @@ import android.media.MediaFormat;
 import android.os.Build;
 import android.view.Surface;
 
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.Frame;
 import com.wterry.jmpegts.com.wterry.jmpegts.parser.Log;
 import com.wterry.jmpegts.com.wterry.jmpegts.parser.Parser;
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.ParserImpl;
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.Program;
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.Stream;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
@@ -97,25 +103,27 @@ public final class MptsVideoDecoder {
             return null;
         }
     }
-    private void fillInputBuffers() {
-        /*
-        int inIndex = mDecoder.dequeueInputBuffer(0);
-        while(inIndex >= 0) {
-            ByteBuffer buffer = getInputBuffer(inIndex);
-            int sampleSize = mExtractor.readSampleData(buffer, 0);
-            long sampleTime = mExtractor.getSampleTime();
-            if (sampleSize < 0) {
-                Log.d(TAG, "InputBuffer BUFFER_FLAG_END_OF_STREAM");
-                mDecoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                break;
-            } else {
-                Log.v(TAG, "Fill input buffer: " + inIndex);
-                mDecoder.queueInputBuffer(inIndex, 0, sampleSize, sampleTime, 0);
-                mExtractor.advance();
-            }
-            inIndex = mDecoder.dequeueInputBuffer(0);
+
+    static int BUF_IDX_CONSUMED = -12345;
+    int mLastInputBufferIndex = BUF_IDX_CONSUMED;
+
+    byte [] mReadBuffer = new byte[188*7*100];
+    private void fillInputBuffers() throws IOException {
+        if (mLastInputBufferIndex  == BUF_IDX_CONSUMED) {
+            mLastInputBufferIndex = mDecoder.dequeueInputBuffer(0);
         }
-        */
+        while (mLastInputBufferIndex >= 0) {
+            int rdBytes = mInFile.read(mReadBuffer);
+            if (rdBytes <= 0) {
+                mEos = true;
+                break;
+            }
+            mParser.parse(mReadBuffer, 0, rdBytes);
+            if (mLastInputBufferIndex  == BUF_IDX_CONSUMED) {
+                mLastInputBufferIndex = mDecoder.dequeueInputBuffer(0);
+            }
+        }
+
     }
 
 
@@ -124,7 +132,7 @@ public final class MptsVideoDecoder {
 
     int mOutputColorFormat;
 
-    public int dequeueOutputBuffer(int timeout, MediaCodec.BufferInfo info) {
+    public int dequeueOutputBuffer(int timeout, MediaCodec.BufferInfo info) throws IOException {
         if (mEos) {
             info.flags =  MediaCodec.BUFFER_FLAG_END_OF_STREAM;
             return MediaCodec.INFO_TRY_AGAIN_LATER;
@@ -217,36 +225,60 @@ public final class MptsVideoDecoder {
         buf.rewind();
     }
 
+    FileInputStream mInFile;
     Parser mParser;
+
+    Stream mVideoStream;
+
+    boolean mSawCodec;
     public void init() throws IOException {
         Log.d(TAG, "init ...");
-        /*
+
         mParser = ParserImpl.createParser();
+        mInFile = new FileInputStream(new File(mVideoFile));
+
+        byte [] readBuffer = new byte[188*7*100];
+        int rdbytes = mInFile.read(readBuffer);
+        int detValue =  mParser.detectFormat(readBuffer, 0, rdbytes);
+        Log.i(TAG, "detect value = " + detValue);
+
+        if (detValue < 4) {
+            mInFile.close();
+            throw  new IOException("Not MP2TS file");
+        }
+
            // mExtractor = new MediaExtractor();
            // mExtractor.setDataSource(mVideoFile);
             mVideoRotation = new VideoRotationDetector().detect(mVideoFile);
+
+
+        Program [] pgs= mParser.getPrograms();
+
         Log.d(TAG, "init detect rotation");
-            for (int i = 0; i < mExtractor.getTrackCount(); i++) {
-                MediaFormat format = mExtractor.getTrackFormat(i);
-                String mime = format.getString(MediaFormat.KEY_MIME);
-                if (mime.startsWith("video/")) {
-                    mExtractor.selectTrack(i);
-                    mDecoder = MediaCodec.createDecoderByType(mime);
-                    //   mDecoder.setCallback(null);
-                    Log.i(TAG, "Video format: " + format);
-                    mInputFormat = format;
-                    //TODO enumlate decoder output format and select prefered
-                    if (mSurface == null) {
-                        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
+            for (Program p : pgs) {
+                for (Stream s :  p.getStreams()) {
+                    com.wterry.jmpegts.com.wterry.jmpegts.parser.MediaFormat fmt = s.getFormat();
+                    Log.i(TAG, fmt.toString());
+                    String mime = s.getFormat().getString(MediaFormat.KEY_MIME);
+                    if (mime.startsWith("video/")) {
+                        mVideoStream = s;
+                        mDecoder = MediaCodec.createDecoderByType(mime);
+                        if (mSurface == null) {
+                            fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
+                        }
+
+                        mVideoWidth = fmt.getInteger(MediaFormat.KEY_WIDTH);
+                        mVideoHeight = fmt.getInteger(MediaFormat.KEY_HEIGHT);
+                     //   mDuration = fmt.getLong(MediaFormat.KEY_DURATION);
+                        MediaFormat andFmt = MediaFormat.createVideoFormat(mime, mVideoWidth, mVideoHeight);
+                        mDecoder.configure(andFmt, mSurface, null, 0);
+                        Log.d(TAG, "init found video track");
+                        break;
                     }
-                    mDecoder.configure(format, mSurface, null, 0);
-                    mVideoWidth = format.getInteger(MediaFormat.KEY_WIDTH);
-                    mVideoHeight = format.getInteger(MediaFormat.KEY_HEIGHT);
-                    mDuration = format.getLong(MediaFormat.KEY_DURATION);
-                    Log.d(TAG, "init found video track");
-                    break;
                 }
             }
+
+
             if (mDecoder == null) {
                 throw new IOException("No video track found in the input " + mVideoFile);
             }
@@ -255,7 +287,28 @@ public final class MptsVideoDecoder {
                 mInputBuffers = mDecoder.getInputBuffers();
                 mOutputBuffers = mDecoder.getOutputBuffers();
             }
-                 */
+        mVideoStream.setListener(new Stream.Listener() {
+            @Override
+            public void onFrame(Frame frame) {
+                if (!mSawCodec) {
+                    mSawCodec = ((frame.getFlag() & Frame.FLAG_CODEC_CONF) != 0);
+                }
+                if (!mSawCodec) {
+                    return;
+                }
+
+                if (mLastInputBufferIndex < 0) {
+                    mLastInputBufferIndex = mDecoder.dequeueInputBuffer(0);
+                }
+                if (mLastInputBufferIndex >= 0 ) {
+                    ByteBuffer buffer = getInputBuffer(mLastInputBufferIndex);
+                    buffer.rewind();
+                    buffer.put(frame.getBuffer(), frame.getOffset(), frame.getSize());
+                    mDecoder.queueInputBuffer(mLastInputBufferIndex, 0, frame.getSize(), frame.getPts(), 0);
+                     mLastInputBufferIndex = BUF_IDX_CONSUMED;
+                }
+            }
+        });
         Log.d(TAG, "init done");
 
         }

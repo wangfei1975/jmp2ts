@@ -23,6 +23,55 @@ public class MainActivity extends AppCompatActivity {
     VideoDecoder mDecoder;
 
     MptsVideoDecoder mMp2tsDecoder;
+
+    void playWithVideoDecoder() {
+        try {
+            mDecoder = new VideoDecoder("/sdcard/f.ts", mSurface);
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+                    do {
+                        int idx = mDecoder.dequeueOutputBuffer(-1, info);
+                        if (idx >= 0) {
+                            mDecoder.releaseOutputBuffer(idx, true);
+                        }
+                    } while((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == 0);
+
+                }
+            }).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    MptsVideoDecoder mMptsDecoder;
+    void playWithMptsVideoDecoder() {
+        try {
+            mMptsDecoder = new MptsVideoDecoder("/sdcard/f.ts", mSurface);
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+                    do {
+                        int idx = 0;
+                        try {
+                            idx = mMptsDecoder.dequeueOutputBuffer(-1, info);
+                            if (idx >= 0) {
+                                mMptsDecoder.releaseOutputBuffer(idx, true);
+                            }
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+
+                    } while((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == 0);
+
+                }
+            }).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -44,24 +93,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
                 mSurface = new Surface(surface);
-                try {
-                    mDecoder = new VideoDecoder("/sdcard/f.ts", mSurface);
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-                            do {
-                                int idx = mDecoder.dequeueOutputBuffer(-1, info);
-                                if (idx >= 0) {
-                                    mDecoder.releaseOutputBuffer(idx, true);
-                                }
-                            } while((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == 0);
-
-                        }
-                    }).start();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                playWithMptsVideoDecoder();
             }
 
             @Override
