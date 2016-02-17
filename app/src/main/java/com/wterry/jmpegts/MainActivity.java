@@ -93,7 +93,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
                 mSurface = new Surface(surface);
-                playWithMptsVideoDecoder();
+                playWithVideoDecoder();
+                //playWithMptsVideoDecoder();
             }
 
             @Override

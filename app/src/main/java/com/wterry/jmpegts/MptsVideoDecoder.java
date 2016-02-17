@@ -48,26 +48,47 @@ public final class MptsVideoDecoder {
     }
 
 
-
+    byte [] mReadBuffer = new byte[188*7];
      private void prepare() throws IOException {
          Log.d(TAG, "prepare ...");
-         int idx = -1, counter = 0;
-         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-         while(mOutputFormat == null && counter++ < 15000) {
-             idx = dequeueOutputBuffer(100, info);
-             if (idx >= 0) {
-                 mDecoder.releaseOutputBuffer(idx, false);
+         mVideoStream.setListener(new Stream.Listener() {
+             @Override
+             public void onFrame(Frame frame) {
+                 if (!mSawCodec) {
+                     mSawCodec = (frame.getFlag() == (Frame.FLAG_CODEC_CONF | Frame.FLAG_IFRAME));
+                 }
+                 if (!mSawCodec) {
+                     return;
+                 }
+                 // logBuffer(frame.getBuffer(), 64);
+                 int idx = mDecoder.dequeueInputBuffer(-1);
+                 if (idx >= 0) {
+                     ByteBuffer buffer = getInputBuffer(idx);
+                     buffer.rewind();
+                     buffer.put(frame.getBuffer(), frame.getOffset(), frame.getSize());
+                     mDecoder.queueInputBuffer(idx, 0, frame.getSize(), frame.getPts(), 0);
+                 }
              }
-             if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                 break;
+         });
+         new Thread(new Runnable() {
+             @Override
+             public void run() {
+                 try {
+                 while(true) {
+                     int rdBytes =  mInFile.read(mReadBuffer);
+                         if (rdBytes <= 0) {
+                             Log.i(TAG, "see EOS");
+                             mEos = true;
+                             break;
+                         }
+                         mParser.parse(mReadBuffer, 0, rdBytes);
+                 }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
              }
-         }
-         if (mOutputFormat == null) {
-             throw new IOException("Could not detect video format");
-         }
-        // Log.d(TAG, "prepare seek and flush");
-        //mExtractor.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
-        //mDecoder.flush();
+         }).start();
+
         Log.d(TAG, "prepare done");
     }
     private ByteBuffer getInputBuffer(int idx) {
@@ -107,22 +128,9 @@ public final class MptsVideoDecoder {
     static int BUF_IDX_CONSUMED = -12345;
     int mLastInputBufferIndex = BUF_IDX_CONSUMED;
 
-    byte [] mReadBuffer = new byte[188*7*100];
+
     private void fillInputBuffers() throws IOException {
-        if (mLastInputBufferIndex  == BUF_IDX_CONSUMED) {
-            mLastInputBufferIndex = mDecoder.dequeueInputBuffer(0);
-        }
-        while (mLastInputBufferIndex >= 0) {
-            int rdBytes = mInFile.read(mReadBuffer);
-            if (rdBytes <= 0) {
-                mEos = true;
-                break;
-            }
-            mParser.parse(mReadBuffer, 0, rdBytes);
-            if (mLastInputBufferIndex  == BUF_IDX_CONSUMED) {
-                mLastInputBufferIndex = mDecoder.dequeueInputBuffer(0);
-            }
-        }
+
 
     }
 
@@ -231,6 +239,20 @@ public final class MptsVideoDecoder {
     Stream mVideoStream;
 
     boolean mSawCodec;
+
+    static void logBuffer(byte [] buffer, int len) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < len; i++) {
+            sb.append(String.format("%02X ", 0xFF & ((int)buffer[i])));
+            if ((i+1)%16 == 0) {
+                Log.i(TAG, sb.toString());
+                sb = new StringBuilder();
+            }
+        }
+        if (sb.length() > 0) {
+            Log.i(TAG, sb.toString());
+        }
+    }
     public void init() throws IOException {
         Log.d(TAG, "init ...");
 
@@ -287,28 +309,7 @@ public final class MptsVideoDecoder {
                 mInputBuffers = mDecoder.getInputBuffers();
                 mOutputBuffers = mDecoder.getOutputBuffers();
             }
-        mVideoStream.setListener(new Stream.Listener() {
-            @Override
-            public void onFrame(Frame frame) {
-                if (!mSawCodec) {
-                    mSawCodec = ((frame.getFlag() & Frame.FLAG_CODEC_CONF) != 0);
-                }
-                if (!mSawCodec) {
-                    return;
-                }
 
-                if (mLastInputBufferIndex < 0) {
-                    mLastInputBufferIndex = mDecoder.dequeueInputBuffer(0);
-                }
-                if (mLastInputBufferIndex >= 0 ) {
-                    ByteBuffer buffer = getInputBuffer(mLastInputBufferIndex);
-                    buffer.rewind();
-                    buffer.put(frame.getBuffer(), frame.getOffset(), frame.getSize());
-                    mDecoder.queueInputBuffer(mLastInputBufferIndex, 0, frame.getSize(), frame.getPts(), 0);
-                     mLastInputBufferIndex = BUF_IDX_CONSUMED;
-                }
-            }
-        });
         Log.d(TAG, "init done");
 
         }
