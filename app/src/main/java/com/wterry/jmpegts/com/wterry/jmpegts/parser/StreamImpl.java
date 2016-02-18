@@ -98,6 +98,9 @@ abstract class StreamImpl extends PayloadParser implements Stream {
         if (size > mMaxFrameSize) {
             mMaxFrameSize = size;
            // LOGD("[%s] mMaxFrameSize = %d", mCodecInfo?mCodecInfo->mName:"noname", mMaxFrameSize);
+            if (mMediaFormat != null) {
+                mMediaFormat.setInteger(MediaFormat.KEY_MAX_SAMPLE_SIZE, mMaxFrameSize);
+            }
         }
     }
     boolean parsePesBuffer(int nextSize, boolean nextIsPesStart) {
@@ -245,7 +248,7 @@ abstract class StreamImpl extends PayloadParser implements Stream {
         return ret;
     
     }
-    void flush() {
+    public void flush() {
         if (mListener != null && mPesBuffer.remains() > 0) {
             parsePesBuffer(mPesBuffer.remains()+1, true);
         }
@@ -256,5 +259,9 @@ abstract class StreamImpl extends PayloadParser implements Stream {
         mStaticPesBuffer = null;
         mLastFrmIsPartial = false;
         mSawPesStart = false;
+    }
+
+    public int getMaxFrameSize() {
+        return mMaxFrameSize;
     }
 }

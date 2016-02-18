@@ -30,12 +30,24 @@ public final class Frame {
     public int getSize() {
         return mSize;
     }
-    Frame(byte [] buffer, int start, int size, long dts, long pts, int flag) {
+
+    public void set(int start, int size, long pts, int flag) {
+        mData = start;
+        mSize = size;
+        mPts = pts;
+        mFlag = flag;
+    }
+
+    public Frame(byte [] buffer, int start, int size, long dts, long pts, int flag) {
         mBuffer = buffer;
         mData = start;
         mSize = size;
         mDts = dts;
         mPts = pts;
         mFlag = flag;
+    }
+
+    public void reset() {
+        mSize = 0;
     }
 }

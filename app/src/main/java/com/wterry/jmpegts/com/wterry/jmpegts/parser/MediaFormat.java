@@ -24,6 +24,8 @@ package com.wterry.jmpegts.com.wterry.jmpegts.parser;
  */
 
 
+import android.os.DropBoxManager;
+
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -141,12 +143,14 @@ public final class MediaFormat {
     public static final String KEY_ASPECT_RATIO_WIDTH = "aspect-ratio-width";
     public static final String KEY_ASPECT_RATIO_HEIGHT = "aspect-ratio-height";
     public static final String KEY_FRAME_RATE_ACCURACY = "frame-rate-accuracy";
-    
+    public static final String KEY_MAX_SAMPLE_SIZE = "max-sample-size";
+
     /**
      * A key describing the four character code of the MediaFormat.
      * The associated value is a integer.
      */
     public static final String KEY_FOURCC = "fourcc";
+
 
     /**
      * A key describing the mime type of the MediaFormat.
@@ -717,6 +721,25 @@ public final class MediaFormat {
     @Override
     public String toString() {
         return mMap.toString();
+    }
+
+    public android.media.MediaFormat toAndroidMediaFormat() {
+        android.media.MediaFormat result = new android.media.MediaFormat();
+        for (Map.Entry<String, Object> e : mMap.entrySet()) {
+            Object value = e.getValue();
+            if (value instanceof  Integer) {
+                result.setInteger(e.getKey(), (Integer)value);
+            } else if (value instanceof String) {
+                result.setString(e.getKey(), (String)value);
+            } else if (value instanceof Long) {
+                result.setLong(e.getKey(), (Long)value);
+            } else if (value instanceof ByteBuffer) {
+                result.setByteBuffer(e.getKey(), (ByteBuffer)value);
+            } else if (value instanceof Float ) {
+                result.setFloat(e.getKey(), (Float)value);
+            }
+        }
+        return result;
     }
 
 }

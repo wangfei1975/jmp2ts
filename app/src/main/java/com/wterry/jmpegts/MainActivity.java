@@ -22,7 +22,7 @@ public class MainActivity extends AppCompatActivity {
 
     VideoDecoder mDecoder;
 
-    MptsVideoDecoder mMp2tsDecoder;
+    MptsVideoDecoder_o mMp2tsDecoder;
 
     void playWithVideoDecoder() {
         try {
@@ -45,6 +45,37 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+
+    void playWithMptsVideoDecodero() {
+        try {
+            final  MptsVideoDecoder_o  decoder_o = new MptsVideoDecoder_o("/sdcard/f.ts", mSurface);
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+                    do {
+                        int idx = 0;
+
+                        try {
+                            idx = decoder_o.dequeueOutputBuffer(10, info);
+                            if (idx >= 0) {
+                                decoder_o.releaseOutputBuffer(idx, true);
+                            }
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+
+
+
+                    } while((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == 0);
+
+                }
+            }).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     MptsVideoDecoder mMptsDecoder;
     void playWithMptsVideoDecoder() {
         try {
@@ -55,14 +86,12 @@ public class MainActivity extends AppCompatActivity {
                     MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
                     do {
                         int idx = 0;
-                        try {
-                            idx = mMptsDecoder.dequeueOutputBuffer(-1, info);
+
+                            idx = mMptsDecoder.dequeueOutputBuffer(10, info);
                             if (idx >= 0) {
                                 mMptsDecoder.releaseOutputBuffer(idx, true);
                             }
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+
 
                     } while((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == 0);
 
@@ -95,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
                 mSurface = new Surface(surface);
                 //playWithVideoDecoder();
                 playWithMptsVideoDecoder();
+                //playWithMptsVideoDecodero();
             }
 
             @Override

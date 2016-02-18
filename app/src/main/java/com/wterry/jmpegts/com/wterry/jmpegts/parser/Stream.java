@@ -8,7 +8,7 @@ public interface Stream {
     public interface Listener {
         public void onFrame(Frame frame);
     }
-    MediaFormat getFormat();
-    void setListener(Listener lis);
-    
+    public MediaFormat getFormat();
+    public void setListener(Listener lis);
+    public int getMaxFrameSize();
 }

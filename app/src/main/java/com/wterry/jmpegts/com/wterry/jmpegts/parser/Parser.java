@@ -9,5 +9,7 @@ public interface Parser {
     public int parse(final byte[] buffer, int pos, int size);
     
     public void flush();
+
+    public int getPacketSize();
     //public void reset();
 }

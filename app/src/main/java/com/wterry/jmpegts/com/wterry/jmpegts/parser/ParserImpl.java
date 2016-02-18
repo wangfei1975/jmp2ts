@@ -142,6 +142,7 @@ public class ParserImpl implements Parser {
         mPat.flush();
     }
 
+    @Override
     public int getPacketSize() {
         return mTsPktSize;
     }

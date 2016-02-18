@@ -2,29 +2,34 @@ package com.wterry.jmpegts;
 
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
-import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.os.Build;
 import android.view.Surface;
 
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.Frame;
 import com.wterry.jmpegts.com.wterry.jmpegts.parser.Log;
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.Parser;
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.ParserImpl;
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.Program;
+import com.wterry.jmpegts.com.wterry.jmpegts.parser.Stream;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
  * Created by feiwang on 15-11-18.
  */
-public final class MptsVideoDecoder {
+public final class MptsVideoDecoder_o {
 
-    static final String TAG = MptsVideoDecoder.class.getSimpleName();
-    static public final int QOMX_COLOR_FormatYUV420PackedSemiPlanar64x32Tile2m8ka = 0x7FA30C03;//
+    static final String TAG = MptsVideoDecoder_o.class.getSimpleName();
     String mVideoFile;
     MediaCodec mDecoder;
     MediaFormat mInputFormat;
     MediaFormat mOutputFormat;
 
-    Mp2tsExtractor mExtractor;
+    //MediaExtractor mExtractor;
     int mVideoRotation;
     long mDuration;
     int mVideoWidth;
@@ -35,7 +40,7 @@ public final class MptsVideoDecoder {
 
     Surface mSurface;
 
-    public MptsVideoDecoder(String videoFile, Surface surface) throws IOException {
+    public MptsVideoDecoder_o(String videoFile, Surface surface) throws IOException {
         mVideoFile = videoFile;
         mSurface = surface;
         init();
@@ -43,28 +48,48 @@ public final class MptsVideoDecoder {
     }
 
 
-
+    byte [] mReadBuffer = new byte[188*7];
      private void prepare() throws IOException {
          Log.d(TAG, "prepare ...");
-         /*
-         int idx = -1, counter = 0;
-         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-         while(mOutputFormat == null && counter++ < 15000) {
-             idx = dequeueOutputBuffer(100, info);
-             if (idx >= 0) {
-                 mDecoder.releaseOutputBuffer(idx, false);
+         mVideoStream.setListener(new Stream.Listener() {
+             @Override
+             public void onFrame(Frame frame) {
+                 if (!mSawCodec) {
+                     mSawCodec = (frame.getFlag() == (Frame.FLAG_CODEC_CONF | Frame.FLAG_IFRAME));
+                 }
+                 if (!mSawCodec) {
+                     return;
+                 }
+                 // logBuffer(frame.getBuffer(), 64);
+                 Log.i(TAG, "got frame size = " + frame.getSize());
+                 int idx = mDecoder.dequeueInputBuffer(-1);
+                 if (idx >= 0) {
+                     ByteBuffer buffer = getInputBuffer(idx);
+                     buffer.rewind();
+                     buffer.put(frame.getBuffer(), frame.getOffset(), frame.getSize());
+                     mDecoder.queueInputBuffer(idx, 0, frame.getSize(), frame.getPts(), 0);
+                 }
              }
-             if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                 break;
+         });
+         new Thread(new Runnable() {
+             @Override
+             public void run() {
+                 try {
+                 while(true) {
+                     int rdBytes =  mInFile.read(mReadBuffer);
+                         if (rdBytes <= 0) {
+                             Log.i(TAG, "see EOS");
+                             mEos = true;
+                             break;
+                         }
+                         mParser.parse(mReadBuffer, 0, rdBytes);
+                 }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
              }
-         }
-         if (mOutputFormat == null) {
-             throw new IOException("Could not detect video format");
-         }
-         */
-        // Log.d(TAG, "prepare seek and flush");
-        //mExtractor.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
-        //mDecoder.flush();
+         }).start();
+
         Log.d(TAG, "prepare done");
     }
     private ByteBuffer getInputBuffer(int idx) {
@@ -80,7 +105,7 @@ public final class MptsVideoDecoder {
 
 
     public void seek(long pos) {
-        mExtractor.seekTo(pos, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+     //   mExtractor.seekTo(pos, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
         mDecoder.flush();
     }
     public ByteBuffer getOutputBuffer(int idx) {
@@ -101,28 +126,13 @@ public final class MptsVideoDecoder {
         }
     }
 
+    static int BUF_IDX_CONSUMED = -12345;
+    int mLastInputBufferIndex = BUF_IDX_CONSUMED;
 
-    private void fillInputBuffers() {
-        int inIndex = mDecoder.dequeueInputBuffer(0);
-        while(inIndex >= 0) {
-            ByteBuffer buffer = getInputBuffer(inIndex);
-            int sampleSize = mExtractor.readSampleData(buffer, 0);
-            long sampleTime = mExtractor.getSampleTime();
-           // byte []tmp = new byte[64];
-          //  buffer.flip();
-         //   buffer.get(tmp);
-          //  logBuffer(tmp);
-            if (sampleSize < 0) {
-                Log.d(TAG, "InputBuffer BUFFER_FLAG_END_OF_STREAM");
-                mDecoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                break;
-            } else {
-                Log.v(TAG, "Fill input buffer: " + inIndex);
-                mDecoder.queueInputBuffer(inIndex, 0, sampleSize, sampleTime, 0);
-                mExtractor.advance();
-            }
-            inIndex = mDecoder.dequeueInputBuffer(0);
-        }
+
+    private void fillInputBuffers() throws IOException {
+
+
     }
 
 
@@ -131,7 +141,7 @@ public final class MptsVideoDecoder {
 
     int mOutputColorFormat;
 
-    public int dequeueOutputBuffer(int timeout, MediaCodec.BufferInfo info) {
+    public int dequeueOutputBuffer(int timeout, MediaCodec.BufferInfo info) throws IOException {
         if (mEos) {
             info.flags =  MediaCodec.BUFFER_FLAG_END_OF_STREAM;
             return MediaCodec.INFO_TRY_AGAIN_LATER;
@@ -202,12 +212,13 @@ public final class MptsVideoDecoder {
             stride = w;
         }
         w = stride;
+        /*
         if (mOutputColorFormat == QOMX_COLOR_FormatYUV420PackedSemiPlanar64x32Tile2m8ka &&
             encoderInputFormat == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
             mOutputConverter = new YUV420PackedSemiPlanar64x32Tile2m8kaToNV12(w, h);
             Log.i(TAG, "Setup convert YUV420PackedSemiPlanar64x32Tile2m8kaToNV12 with (" + w + "x" + h+")");
         }
-
+*/
     }
 
     public final boolean needConvertOutput() {
@@ -222,37 +233,75 @@ public final class MptsVideoDecoder {
         mOutputConverter.convert(mConverterBuffer, output);
         buf.rewind();
     }
+
+    FileInputStream mInFile;
+    Parser mParser;
+
+    Stream mVideoStream;
+
+    boolean mSawCodec;
+
+    static void logBuffer(byte [] buffer, int len) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < len; i++) {
+            sb.append(String.format("%02X ", 0xFF & ((int)buffer[i])));
+            if ((i+1)%16 == 0) {
+                Log.i(TAG, sb.toString());
+                sb = new StringBuilder();
+            }
+        }
+        if (sb.length() > 0) {
+            Log.i(TAG, sb.toString());
+        }
+    }
     public void init() throws IOException {
         Log.d(TAG, "init ...");
-            mExtractor = new Mp2tsExtractor();
-            mExtractor.setDataSource(mVideoFile);
+
+        mParser = ParserImpl.createParser();
+        mInFile = new FileInputStream(new File(mVideoFile));
+
+        byte [] readBuffer = new byte[188*7*100];
+        int rdbytes = mInFile.read(readBuffer);
+        int detValue =  mParser.detectFormat(readBuffer, 0, rdbytes);
+        Log.i(TAG, "detect value = " + detValue);
+
+        if (detValue < 4) {
+            mInFile.close();
+            throw  new IOException("Not MP2TS file");
+        }
+
+           // mExtractor = new MediaExtractor();
+           // mExtractor.setDataSource(mVideoFile);
             mVideoRotation = new VideoRotationDetector().detect(mVideoFile);
+
+
+        Program [] pgs= mParser.getPrograms();
+
         Log.d(TAG, "init detect rotation");
-            for (int i = 0; i < mExtractor.getTrackCount(); i++) {
-                MediaFormat format = mExtractor.getTrackFormat(i);
-                String mime = format.getString(MediaFormat.KEY_MIME);
-                if (mime.startsWith("video/")) {
-                    mExtractor.selectTrack(i);
-                    mDecoder = MediaCodec.createDecoderByType(mime);
-                    //   mDecoder.setCallback(null);
-                    Log.i(TAG, "Video format: " + format);
-                    mInputFormat = format;
-                    //TODO enumlate decoder output format and select prefered
-                    if (mSurface == null) {
-                        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
+            for (Program p : pgs) {
+                for (Stream s :  p.getStreams()) {
+                    com.wterry.jmpegts.com.wterry.jmpegts.parser.MediaFormat fmt = s.getFormat();
+                    Log.i(TAG, fmt.toString());
+                    String mime = s.getFormat().getString(MediaFormat.KEY_MIME);
+                    if (mime.startsWith("video/")) {
+                        mVideoStream = s;
+                        mDecoder = MediaCodec.createDecoderByType(mime);
+                        if (mSurface == null) {
+                            fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
+                        }
+
+                        mVideoWidth = fmt.getInteger(MediaFormat.KEY_WIDTH);
+                        mVideoHeight = fmt.getInteger(MediaFormat.KEY_HEIGHT);
+                     //   mDuration = fmt.getLong(MediaFormat.KEY_DURATION);
+                        MediaFormat andFmt = MediaFormat.createVideoFormat(mime, mVideoWidth, mVideoHeight);
+                        mDecoder.configure(andFmt, mSurface, null, 0);
+                        Log.d(TAG, "init found video track");
+                        break;
                     }
-                    mDecoder.configure(format, mSurface, null, 0);
-                    mVideoWidth = format.getInteger(MediaFormat.KEY_WIDTH);
-                    mVideoHeight = format.getInteger(MediaFormat.KEY_HEIGHT);
-                    try {
-                        mDuration = format.getLong(MediaFormat.KEY_DURATION);
-                    }
-                    catch (NullPointerException  e) { /* no such field */ }
-                    catch (ClassCastException e) { /* field of different type */ }
-                    Log.d(TAG, "init found video track");
-                    break;
                 }
             }
+
+
             if (mDecoder == null) {
                 throw new IOException("No video track found in the input " + mVideoFile);
             }
@@ -261,7 +310,9 @@ public final class MptsVideoDecoder {
                 mInputBuffers = mDecoder.getInputBuffers();
                 mOutputBuffers = mDecoder.getOutputBuffers();
             }
+
         Log.d(TAG, "init done");
+
         }
 
     public long getDuration() {
