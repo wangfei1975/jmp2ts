@@ -99,26 +99,14 @@ public final class VideoDecoder {
         }
     }
 
-    static void logBuffer(byte [] buffer) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < buffer.length; i++) {
-            sb.append(String.format("%02X ", 0xFF & ((int)buffer[i])));
-            if ((i+1)%16 == 0) {
-                Log.i(TAG, sb.toString());
-                sb = new StringBuilder();
-            }
-        }
-        if (sb.length() > 0) {
-            Log.i(TAG, sb.toString());
-        }
-    }
+
     private void fillInputBuffers() {
         int inIndex = mDecoder.dequeueInputBuffer(0);
         while(inIndex >= 0) {
             ByteBuffer buffer = getInputBuffer(inIndex);
             int sampleSize = mExtractor.readSampleData(buffer, 0);
             long sampleTime = mExtractor.getSampleTime();
-            byte []tmp = new byte[64];
+           // byte []tmp = new byte[64];
           //  buffer.flip();
          //   buffer.get(tmp);
           //  logBuffer(tmp);

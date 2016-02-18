@@ -218,4 +218,9 @@ public final class ProgramImpl extends PayloadParser implements Program {
             Log.d(TAG, "mNumPendingStream = " + mPendingStreams.size());
         }
     }
+    void flush() {
+        for (StreamImpl stream : mStreams) {
+            stream.flush();
+        }
+    }
 }

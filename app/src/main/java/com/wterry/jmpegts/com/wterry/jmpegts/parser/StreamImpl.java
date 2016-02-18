@@ -16,8 +16,9 @@ abstract class StreamImpl extends PayloadParser implements Stream {
     SLConfigDescriptor  mSLConfigDescr;
     Listener mListener;
     boolean mSawPesStart;
+    boolean mSizeInHeader;
 
-    PesParser           mPesParser = new PesParser();
+    PesParser    mPesParser = new PesParser();
     BufferWriter mPesBuffer = new BufferWriter(null, 0, 0);
 
     byte [] mStaticPesBuffer;
@@ -83,7 +84,7 @@ abstract class StreamImpl extends PayloadParser implements Stream {
         return mMediaFormat;
     }
 
-    void updateOutputBuffer(byte [] lastData, int pos, int size) {
+    private void updateOutputBuffer(byte [] lastData, int pos, int size) {
         if (mStaticPesBuffer == null) {
             mStaticPesBuffer = new byte[mStaticPesBufferSize];
         }
@@ -99,7 +100,7 @@ abstract class StreamImpl extends PayloadParser implements Stream {
            // LOGD("[%s] mMaxFrameSize = %d", mCodecInfo?mCodecInfo->mName:"noname", mMaxFrameSize);
         }
     }
-    boolean parsePesBuffer(int nextSize) {
+    boolean parsePesBuffer(int nextSize, boolean nextIsPesStart) {
 
         Log.d(TAG, String.format("pid 0x%x pes buffer size %d nextSize %d", getPid(), mPesBuffer.tell(), nextSize));
         Frame frm = new Frame(mPesBuffer.data(), -1, 0, -1, -1, 0);
@@ -191,12 +192,17 @@ abstract class StreamImpl extends PayloadParser implements Stream {
     }
     @Override
     int parse(HeaderParser tsHeader, BufferReader inBuf, boolean forceParse) {
-
+        if (tsHeader.hasError()) {
+            Log.w(TAG, "see transport error indicator in packet header, discard packet.");
+            mSawPesStart = false;
+            return inBuf.remains();
+        }
         if (mListener == null && !forceParse) {
             return inBuf.remains();
         }
 
-        if (tsHeader.isPesStart()) {
+        if (tsHeader.isPesStart() && !mSawPesStart) {
+            mPesBuffer.seek(0);
             mSawPesStart = true;
         }
 
@@ -210,10 +216,15 @@ abstract class StreamImpl extends PayloadParser implements Stream {
         }
 
         //parse pes buffer if do not have enough space to hold next inBuf
-        if ((mPesBuffer.tell() > 0) && (mPesBuffer.remains() < inBuf.remains()) && !parsePesBuffer(inBuf.remains())) {
-            return -1;
+        //or we see pes start and it is a sizeInHeader(AVCC like) format
+        if ((mPesBuffer.tell() > 0)
+                && ((mSizeInHeader && tsHeader.isPesStart())
+                || (mPesBuffer.remains() < inBuf.remains()))) {
+             parsePesBuffer(inBuf.remains(), tsHeader.isPesStart());
         }
- 
+
+        assert(mPesBuffer.remains() >= inBuf.remains());
+
         int off = mPesBuffer.tell();
         int ret = mPesParser.parse(tsHeader, inBuf, mPesBuffer, mSLConfigDescr);
         if (ret < 0) {
@@ -222,15 +233,28 @@ abstract class StreamImpl extends PayloadParser implements Stream {
 
         long pts = mPesParser.getPts();
         if (pts >= 0) {
-            Log.d(TAG, String.format("enqueue pts %d offset = %d", pts, mParsedBytes + off));
+            Log.v(TAG, "enqueue pts " + pts + "offset = " + (mParsedBytes + off));
             mPtsQue.enqueue(pts, mParsedBytes + off);
             detectFrameRate(pts);
         }
-        if (tsHeader.isPesStart() && !parsePesBuffer(0)) {
+        //parse pesBuffer for AnnexB like format, i.e, detect start code(0 0 0 1) to
+        //find frame end
+        if (!mSizeInHeader && tsHeader.isPesStart() && !parsePesBuffer(0, false)) {
             return -1;
         }
         return ret;
     
     }
- 
+    void flush() {
+        if (mListener != null && mPesBuffer.remains() > 0) {
+            parsePesBuffer(mPesBuffer.remains()+1, true);
+        }
+        mPesBuffer.reset(null, 0);
+        mPtsQue.reset();
+        mParsedFrames = 0;
+        mParsedBytes = 0;
+        mStaticPesBuffer = null;
+        mLastFrmIsPartial = false;
+        mSawPesStart = false;
+    }
 }

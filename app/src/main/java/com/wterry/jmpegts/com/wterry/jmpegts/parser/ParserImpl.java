@@ -136,7 +136,12 @@ public class ParserImpl implements Parser {
     public int parse(byte[] data, int pos, int size) {
         return parse(data, pos, size, false);
     }
-    
+
+    @Override
+    public void flush() {
+        mPat.flush();
+    }
+
     public int getPacketSize() {
         return mTsPktSize;
     }

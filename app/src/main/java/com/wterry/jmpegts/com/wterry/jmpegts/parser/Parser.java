@@ -8,6 +8,6 @@ public interface Parser {
     public Program [] getPrograms();
     public int parse(final byte[] buffer, int pos, int size);
     
-    //public void flush();
+    public void flush();
     //public void reset();
 }

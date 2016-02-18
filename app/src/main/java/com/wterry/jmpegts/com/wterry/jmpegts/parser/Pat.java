@@ -70,4 +70,10 @@ public final class Pat extends PayloadParser {
     int getNumOfPrograms() {
         return mProgs.size();
     }
+
+    void flush() {
+        for (ProgramImpl pg : mProgs) {
+            pg.flush();
+        }
+    }
 }
