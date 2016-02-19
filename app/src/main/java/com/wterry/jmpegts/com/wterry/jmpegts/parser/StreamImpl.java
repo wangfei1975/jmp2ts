@@ -35,8 +35,7 @@ abstract class StreamImpl extends PayloadParser implements Stream {
         Log.i(TAG, String.format("creating stream 0x%x for pid 0x%x", streamType, pid));
         switch(streamType) {
         case 0x02:
-          //  return new Mp2vStream(tsParser, pid, streamType, info, infoSize);
-            break;
+            return new Mp2vStream(tsParser, pid, streamType);
         case 0x10:
           //  return new Mp4vStream(tsParser, pid, streamType, info, infoSize);
             break;

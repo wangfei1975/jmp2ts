@@ -5,6 +5,9 @@ import com.wterry.jmpegts.com.wterry.jmpegts.parser.StreamImpl;
 
 abstract public class VideoStream extends StreamImpl {
 
+    static final int  VIDEO_DEFAULT_FPS  =   24;
+    static final int  VIDEO_DEFAULT_FPSACC  = 49;
+
     VideoStream(ParserImpl tp, int pid, int streamType) {
         super(tp, pid, streamType);
     }

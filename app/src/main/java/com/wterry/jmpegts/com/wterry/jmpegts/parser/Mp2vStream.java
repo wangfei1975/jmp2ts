@@ -1,13 +1,21 @@
 package com.wterry.jmpegts.com.wterry.jmpegts.parser;
 
+import android.provider.MediaStore;
+
 /**
  * Created by Fei Wang on 2/18/2016.
  */
 
 public class Mp2vStream extends VideoStream {
+    static final int [] fpsNum = {0, 24000, 24, 25, 30000, 30, 50, 60000, 60};
+    static final int [] fpsDen = {0, 1001, 1, 1, 1001, 1, 1, 1001, 1};
 
-        int locateFrame(final byte [] buffer, int startp, int size,  Frame  outFrame) {
-            int flag = 0, nflg = 0;
+    Mp2vStream(ParserImpl tp, int pid, int streamType) {
+        super(tp, pid, streamType);
+    }
+
+    int locateFrame(final byte [] buffer, int startp, int size,  Frame  outFrame) {
+            int flag = 0;
             int  fstart, fend;
             final int endp = startp + size;
             outFrame.mData = -1;
@@ -16,107 +24,87 @@ public class Mp2vStream extends VideoStream {
             if ((fstart = findStartCode(buffer, startp, endp)) < 0) {
                 return -1;
             }
+            int code = buffer[fstart+3]&0xFF;
+            if (code == 0xB3) {
+                flag |= Frame.FLAG_CODEC_CONF;
+            } else if (code == 0x00) {
+                if (((buffer[fstart+4]>>3)&0x07) == 1) {
+                    flag |= Frame.FLAG_IFRAME;
+                }
+            }
             outFrame.mData = fstart;
             while((fend = findStartCode(buffer, fstart+1, endp)) >= 0) {
-                final byte code = buffer[fstart+3];
+                code = buffer[fstart+3]&0xFF;
                 if (code == 0xB3) {
                     flag |= Frame.FLAG_CODEC_CONF;
                 } else if (code == 0x00) {
-                    if (((buffer[fstart+4]>>3)&0x07) == 1) {
+                    int iflag = buffer[fstart+5]&0xFF;
+                    if (((iflag>>3)&0x07) == 1) {
                         flag |= Frame.FLAG_IFRAME;
                     }
                 }
-                if (buffer[fend+3] == 0) {
-                    break;
+                if (fend + 3 < endp) {
+                    if (buffer[fend+3] == 0 && flag != Frame.FLAG_CODEC_CONF) {
+                        break;
+                    }
                 }
                 fstart = fend;
             }
 
             outFrame.mFlag = flag;
-            if (fend) {
+            if (fend >= 0) {
                 outFrame.mSize = fend - outFrame.mData;
                 // LOGI("got frame size = %d", outFrame.mSize);
                 return 1;
             }
             return 0;
         }
-
     @Override
-    void parseMediaFormat(Frame frm) {
+    void parseMediaFormat(final Frame frm) {
+        final byte [] buffer = frm.getBuffer();
+        int frame = frm.getOffset();
+        int endp = frame + frm.getSize();
+        while(frame >= 0 && frame < endp - 4) {
+            if (buffer[frame] == 0 && buffer[frame+1] == 0 && buffer[frame+2] == 1 && (buffer[frame+3]&0xFF) == 0xB3) {
+                break;
+            }
+            frame = findStartCode(buffer, frame + 1, endp);
+        }
+        if (frame < 0) {
+            Log.w(TAG, "could not find codec conf data");
+            return ;
+        }
+        Log.i(TAG, "H264 parse codec info");
+        MediaFormat fmt = new MediaFormat();
+        fmt.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_MPEG2);
+        String mName = "MPEG 2 Video";
+        fmt.setString(MediaFormat.KEY_DESCRIPTION, mName);
+        fmt.setInteger(MediaFormat.KEY_FOURCC, Mp4Descriptors.fourcc("MP2V"));
+
+        int width = ((buffer[frame+4]&0xFF) << 4) | ((buffer[frame+5]&0xF0) >> 4);
+        int heigh = ((buffer[frame+5]&0x0F) << 8) | (buffer[frame+6]&0xFF);
+        fmt.setInteger(MediaFormat.KEY_WIDTH, width);
+        fmt.setInteger(MediaFormat.KEY_HEIGHT, heigh);
+
+        int aspectRatio = (buffer[frame+7]&0xF0) >> 4;
+        int fpsidx = buffer[frame+7] & 0x0F;
+        int bitrate = ((buffer[frame+8]&0xFF) << 10) | ((buffer[frame+9]&0xFF) << 2) | ((buffer[frame+10]&0xFF) >> 6);
+
+        int fps = VIDEO_DEFAULT_FPS;
+        int frameRateAccuracy = VIDEO_DEFAULT_FPSACC;
+
+        if (fpsidx > 0 && fpsidx < 9) {
+            fps = (fpsNum[fpsidx] + fpsDen[fpsidx] - 1)/fpsDen[fpsidx];
+            frameRateAccuracy = 100;
+        }
+        fmt.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+        fmt.setInteger(MediaFormat.KEY_FRAME_RATE_ACCURACY, frameRateAccuracy);
+        fmt.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+
+        Log.i(TAG, String.format("Got MPEG 2 Video Fourcc(MP2V), width(%d) heigh(%d), Aspect ratio(%d), Frame rate(%d), Bit rate(%d)",
+                width, heigh, aspectRatio, fps, bitrate * 400));
+        this.mMediaFormat = fmt;
 
     }
 
-    virtual CodecInfo * parseCodecInfo(const Frame & frm) const {
-            const uint8_t * frame = frm.getData();
-            const uint8_t * endp = frame + frm.getSize();
-            while(frame != NULL && frame < endp - 4) {
-                if (frame[0] == 0 && frame[1] == 0 && frame[2] == 1 && frame[3] == 0xB3) {
-                    break;
-                }
-                frame = VideoStream::findStartCode(frame + 1, endp);
-            }
-            if (frame == NULL) {
-                return NULL;
-            }
-            CodecInfo * info =  new CodecInfo();
-            info->mName = "MPEG 2 Video";
-            info->mFourcc = FOURCC("MP2V");
-
-            info->mWidth = (frame[4] << 4) | (frame[5] >> 4);
-            info->mHeigh = (frame[5] << 8) | frame[6];
-
-            info->mAspectRatio = frame[7] >> 4;
-            int32_t fpsidx = frame[7] & 0x0F;
-            info->mBitrate = (frame[8] << 10) | (frame[9] << 2) | (frame[10] >> 6);
-
-
-            static const uint32_t fpsNum[9] = {0, 24000, 24, 25, 30000, 30, 50, 60000, 60};
-            static const uint32_t fpsDen[9] = {0, 1001, 1, 1, 1001, 1, 1, 1001, 1};
-            if (fpsidx > 0 && fpsidx < 9) {
-                info->mFrameRate = (fpsNum[fpsidx] + fpsDen[fpsidx] - 1)/fpsDen[fpsidx];
-                info->mFrameRateAccuracy = 100;
-            } else {
-                info->mFrameRate = VIDEO_DEFAULT_FPS;
-                info->mFrameRateAccuracy = VIDEO_DEFAULT_FPSACC;
-            }
-            LOGI("Got MPEG 2 Video Fourcc(MP2V), width(%d) heigh(%d), Aspect ratio(%d), Frame rate(%d), Bit rate(%d)",
-                    info->mWidth, info->mHeigh, info->mAspectRatio, info->mFrameRate, info->mBitrate * 400);
-
-            return info;
-        }
-
-        static const uint8_t * findFrameStart(const uint8_t * start, const uint8_t * endp, uint32_t * frameFlag) {
-            assert(endp > start);
-            if (endp - start < 4) {
-                return NULL;
-            }
-            uint32_t code = *start++;
-            code = (code << 8) | * start++;
-            code = (code << 8) | * start++;
-            while(start < endp) {
-                code = (code << 8) | * start++;
-                if (code == 0x000001B3) {
-                    *frameFlag |= IFrame::FLAG_CODEC_CONF;
-                    return start-4;
-                } else if (code == 0x00000100) {
-                    if (((start[1]>>3) & 0x07) == 1) {
-                        *frameFlag |= IFrame::FLAG_IFRAME;
-                    }
-                    return start-4;
-                }
-            }
-            return NULL;
-        }
-        public:
-        Mp2vStream(ParserImpl * tsParser, uint16_t pid, uint8_t streamType, const uint8_t * info, int32_t infoSize) :
-        VideoStream(tsParser, pid, streamType, info, infoSize) {
-        }
-
-        virtual int32_t getRequiredBufferSize() const {
-            int32_t s1 = mMaxFrameSize * 6;
-            int32_t s2 = VideoStream::getRequiredBufferSize();
-            return s1 > s2 ? s1: s2;
-        }
-    };
-}
 }

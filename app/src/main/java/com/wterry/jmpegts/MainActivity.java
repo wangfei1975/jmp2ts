@@ -24,9 +24,14 @@ public class MainActivity extends AppCompatActivity {
 
     MptsVideoDecoder_o mMp2tsDecoder;
 
+    static final String ts1 = "/sdcard/BigBunny_mp2v_mpga_480p_20.ts";
+    static final String ts2 = "/sdcard/BigBunny_h264_aac_480p_20.ts";
+
+
+
     void playWithVideoDecoder() {
         try {
-            mDecoder = new VideoDecoder("/sdcard/f.ts", mSurface);
+            mDecoder = new VideoDecoder(ts1, mSurface);
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -48,7 +53,7 @@ public class MainActivity extends AppCompatActivity {
 
     void playWithMptsVideoDecodero() {
         try {
-            final  MptsVideoDecoder_o  decoder_o = new MptsVideoDecoder_o("/sdcard/f.ts", mSurface);
+            final  MptsVideoDecoder_o  decoder_o = new MptsVideoDecoder_o(ts1, mSurface);
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -79,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
     MptsVideoDecoder mMptsDecoder;
     void playWithMptsVideoDecoder() {
         try {
-            mMptsDecoder = new MptsVideoDecoder("/sdcard/f.ts", mSurface);
+            mMptsDecoder = new MptsVideoDecoder(ts1, mSurface);
             new Thread(new Runnable() {
                 @Override
                 public void run() {

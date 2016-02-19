@@ -224,7 +224,7 @@ public final class VideoDecoder {
         Log.d(TAG, "init ...");
             mExtractor = new MediaExtractor();
             mExtractor.setDataSource(mVideoFile);
-            mVideoRotation = new VideoRotationDetector().detect(mVideoFile);
+            mVideoRotation = 0 ;;//new VideoRotationDetector().detect(mVideoFile);
         Log.d(TAG, "init detect rotation");
             for (int i = 0; i < mExtractor.getTrackCount(); i++) {
                 MediaFormat format = mExtractor.getTrackFormat(i);
