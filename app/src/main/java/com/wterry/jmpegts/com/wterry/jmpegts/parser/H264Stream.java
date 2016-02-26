@@ -242,7 +242,7 @@ public final class H264Stream extends VideoStream {
 
     }
 
-    String mName;
+
     @Override
     void parseMediaFormat(final Frame frm) {
         // LOGI("h264 parse codec info frm data %p frm size %d 0x%02x 0x%02x 0x%02x",
@@ -270,8 +270,7 @@ public final class H264Stream extends VideoStream {
         MediaFormat fmt = new MediaFormat();
         fmt.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_AVC);
         fmt.setInteger(MediaFormat.KEY_FOURCC, Mp4Descriptors.fourcc("H264"));
-        mName = "H264/AVC Video ISO/IEC14496-10 Annex B";
-        fmt.setString(MediaFormat.KEY_DESCRIPTION, mName);
+        fmt.setString(MediaFormat.KEY_DESCRIPTION, "H264/AVC Video ISO/IEC14496-10 Annex B");
         decodeSps(fmt, data, sp + 4, ep - sp - 4);
         int frameRate = fmt.getInteger(MediaFormat.KEY_FRAME_RATE, 0);
         if (frameRate == 0 && mNumDetectPts > 0 && mDetectPtsDeltas > 0) {
@@ -320,13 +319,4 @@ public final class H264Stream extends VideoStream {
                     && (((nalType >= H264NalSEI) && (nalType <= H264NalPPS)) || ((nalType >= 14) && (nalType <= 18)) || (nalType == H264NalAuDelimiter));
         }
     }
-
-    @Override
-    public String toString() {
-        if (mName != null) {
-            return mName;
-        }
-        return "H264Stream";
-    }
-
 }
