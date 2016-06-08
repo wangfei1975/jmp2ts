@@ -162,7 +162,7 @@ public class Mp4vStream extends VideoStream {
         //TODO FPS
         fmt.setInteger(MediaFormat.KEY_FRAME_RATE, 24);
         fmt.setInteger(MediaFormat.KEY_FRAME_RATE_ACCURACY, 100);
-        
+
         mMediaFormat = fmt;
         Log.i(TAG, "MP4V format = " + fmt);
 
